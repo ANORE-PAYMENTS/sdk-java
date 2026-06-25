@@ -21,8 +21,8 @@
   </licenses>
 
   <scm>
-    <url>https://github.com/alexbrevis/zpay</url>
-    <connection>scm:git:https://github.com/alexbrevis/zpay.git</connection>
+    <url>https://github.com/roditsya/sdk-java</url>
+    <connection>scm:git:https://github.com/roditsya/sdk-java.git</connection>
   </scm>
 
   <properties>
