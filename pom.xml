@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <groupId>cc.anore</groupId>
+  <artifactId>anore</artifactId>
+  <version>1.0.0</version>
+  <packaging>jar</packaging>
+
+  <name>anore</name>
+  <description>Official anore payments SDK for Java — accept SBP, cards and crypto payments. Zero dependencies, JDK 11+.</description>
+  <url>https://anore.cc/docs</url>
+
+  <licenses>
+    <license>
+      <name>MIT License</name>
+      <url>https://opensource.org/licenses/MIT</url>
+    </license>
+  </licenses>
+
+  <scm>
+    <url>https://github.com/alexbrevis/zpay</url>
+    <connection>scm:git:https://github.com/alexbrevis/zpay.git</connection>
+  </scm>
+
+  <properties>
+    <maven.compiler.release>11</maven.compiler.release>
+    <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+  </properties>
+
+  <!-- zero runtime dependencies: JDK 11+ only (java.net.http, javax.crypto) -->
+
+</project>
