@@ -30,8 +30,8 @@ java/
 </repositories>
 
 <dependency>
-  <groupId>com.github.roditsya.zpay</groupId>
-  <artifactId>anore</artifactId>
+  <groupId>com.github.ANORE-PAYMENTS</groupId>
+  <artifactId>sdk-java</artifactId>
   <version>main-SNAPSHOT</version>
 </dependency>
 ```

@@ -21,8 +21,8 @@
   </licenses>
 
   <scm>
-    <url>https://github.com/roditsya/sdk-java</url>
-    <connection>scm:git:https://github.com/roditsya/sdk-java.git</connection>
+    <url>https://github.com/anore-payments/sdk-java</url>
+    <connection>scm:git:https://github.com/anore-payments/sdk-java.git</connection>
   </scm>
 
   <properties>
