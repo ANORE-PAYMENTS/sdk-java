@@ -8,7 +8,7 @@
 java/
 ├── pom.xml
 └── src/main/java/cc/anore/
-    ├── AnoreClient.java   клиент (билдер, ретраи) + CreatePaymentParams
+    ├── AnoreClient.java   клиент платежей, баланса и выплат
     ├── Webhooks.java      verify / parse
     ├── Payment.java       модель платежа
     ├── WebhookEvent.java  модель события вебхука
@@ -30,8 +30,8 @@ java/
 </repositories>
 
 <dependency>
-  <groupId>com.github.roditsya</groupId>
-  <artifactId>sdk-java</artifactId>
+  <groupId>com.github.roditsya.zpay</groupId>
+  <artifactId>anore</artifactId>
   <version>main-SNAPSHOT</version>
 </dependency>
 ```
@@ -58,12 +58,24 @@ System.out.println(payment.paymentUrl()); // отправьте клиента �
 // 2. проверить статус
 Payment status = anore.getPayment(payment.id());
 System.out.println(status.status() + " " + status.paid()); // paid true
+
+PaymentList page = anore.listPayments(new AnoreClient.ListPaymentsParams()
+        .shopId(1).status("paid").limit(20));
+Balance balance = anore.getBalance(1L);
+
+Payout payout = anore.createPayout(
+        AnoreClient.CreatePayoutParams.of(5000, "usdt_ton", "UQ...")
+                .shopId(1)
+                .externalId("payout_42"));
+System.out.println(payout.id());
 ```
 
 ## Проверка вебхука
 
 При оплате anore шлёт `POST` на ваш URL с заголовком `Anore-Signature`.
 Проверяйте подпись по **сырому** телу запроса (не распарсенному JSON):
+
+Тот же обработчик принимает `payout.created`, `payout.processing`, `payout.succeeded`, `payout.failed` и `payout.updated` (ручная корректировка статуса, см. `statusRevision`); используйте `event.isPayout()`.
 
 ```java
 // пример для сервлета
@@ -99,6 +111,12 @@ try {
 | `AnoreClient.builder().apiKey(...).secret(...).build()` | клиент; `secret` подписывает исходящие запросы |
 | `createPayment(CreatePaymentParams)` | создать счёт → `Payment` |
 | `getPayment(id)` | статус → `Payment` (`.status()`, `.paid()`) |
+| `listPayments(ListPaymentsParams)` | страница платежей → `PaymentList` |
+| `getBalance(shopId)` | баланс → `Balance` |
+| `getPayoutFees(shopId)` | комиссии → `PayoutFees` |
+| `getPayoutRates(shopId)` | курсы → `PayoutRates` |
+| `createPayout(CreatePayoutParams)` | заявка → `Payout` |
+| `getPayout(id)` | статус выплаты → `Payout` |
 | `Webhooks.verify(rawBody, signature, secret)` | проверка подписи → `boolean` |
 | `Webhooks.parse(rawBody, signature, secret)` | проверка + разбор → `WebhookEvent` (бросает `SignatureException`) |
 

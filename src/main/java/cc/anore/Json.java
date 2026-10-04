@@ -1,21 +1,15 @@
 package cc.anore;
 
+import java.math.BigDecimal;
+import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
-/**
- * Minimal zero-dependency JSON parser/serializer — just enough for the API:
- * objects, arrays, strings (with escapes), numbers, booleans, null. Numbers
- * become Long when integral and within range, otherwise Double. Not a general
- * library; intentionally small. Package-private.
- */
 final class Json {
 
     private Json() {}
-
-    // ---- parse ----
 
     static Object parse(String s) {
         if (s == null) return null;
@@ -31,7 +25,7 @@ final class Json {
     static Map<String, Object> parseObject(String s) {
         Object v = parse(s);
         if (v instanceof Map) return (Map<String, Object>) v;
-        return new LinkedHashMap<>();
+        throw new AnoreException("invalid JSON: expected an object");
     }
 
     private static final class Parser {
@@ -66,7 +60,7 @@ final class Json {
 
         Map<String, Object> object() {
             Map<String, Object> m = new LinkedHashMap<>();
-            pos++; // {
+            pos++;
             skipWs();
             if (peek() == '}') { pos++; return m; }
             while (true) {
@@ -88,7 +82,7 @@ final class Json {
 
         List<Object> array() {
             List<Object> a = new ArrayList<>();
-            pos++; // [
+            pos++;
             skipWs();
             if (peek() == ']') { pos++; return a; }
             while (true) {
@@ -104,11 +98,12 @@ final class Json {
 
         String string() {
             StringBuilder sb = new StringBuilder();
-            pos++; // opening "
+            pos++;
             while (pos < src.length()) {
                 char c = src.charAt(pos++);
                 if (c == '"') return sb.toString();
                 if (c == '\\') {
+                    if (atEnd()) throw new AnoreException("invalid JSON: incomplete escape");
                     char e = src.charAt(pos++);
                     switch (e) {
                         case '"': sb.append('"'); break;
@@ -120,12 +115,16 @@ final class Json {
                         case 'r': sb.append('\r'); break;
                         case 't': sb.append('\t'); break;
                         case 'u':
-                            sb.append((char) Integer.parseInt(src.substring(pos, pos + 4), 16));
+                            if (pos + 4 > src.length()) throw new AnoreException("invalid JSON: incomplete Unicode escape");
+                            String hex = src.substring(pos, pos + 4);
+                            if (!hex.matches("[a-fA-F0-9]{4}")) throw new AnoreException("invalid JSON: bad Unicode escape");
+                            sb.append((char) Integer.parseInt(hex, 16));
                             pos += 4;
                             break;
                         default: throw new AnoreException("invalid JSON: bad escape \\" + e);
                     }
                 } else {
+                    if (c < 0x20) throw new AnoreException("invalid JSON: unescaped control character");
                     sb.append(c);
                 }
             }
@@ -140,15 +139,21 @@ final class Json {
                 else break;
             }
             String num = src.substring(start, pos);
-            if (num.isEmpty()) throw new AnoreException("invalid JSON: number expected at " + start);
+            if (!num.matches("-?(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?(?:[eE][+-]?[0-9]+)?")) {
+                throw new AnoreException("invalid JSON: invalid number at " + start);
+            }
             if (num.indexOf('.') < 0 && num.indexOf('e') < 0 && num.indexOf('E') < 0) {
                 try {
                     return Long.parseLong(num);
                 } catch (NumberFormatException ignore) {
-                    // falls through to double for out-of-range integers
+                    return new BigInteger(num);
                 }
             }
-            return Double.parseDouble(num);
+            try {
+                return new BigDecimal(num);
+            } catch (NumberFormatException error) {
+                throw new AnoreException("invalid JSON: invalid number at " + start, error);
+            }
         }
 
         boolean bool() {
@@ -170,8 +175,6 @@ final class Json {
         }
     }
 
-    // ---- serialize ----
-
     static String write(Object value) {
         StringBuilder sb = new StringBuilder();
         writeValue(sb, value);
@@ -185,6 +188,10 @@ final class Json {
         } else if (v instanceof String) {
             writeString(sb, (String) v);
         } else if (v instanceof Boolean || v instanceof Number) {
+            if ((v instanceof Double && !Double.isFinite((Double) v))
+                    || (v instanceof Float && !Float.isFinite((Float) v))) {
+                throw new IllegalArgumentException("JSON cannot contain non-finite numbers");
+            }
             sb.append(v.toString());
         } else if (v instanceof Map) {
             writeObject(sb, (Map<String, Object>) v);

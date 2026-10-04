@@ -2,9 +2,10 @@ package cc.anore;
 
 import java.util.Collections;
 import java.util.Map;
+import java.math.BigDecimal;
+import java.util.ArrayList;
+import java.util.List;
 
-/** Base for typed response wrappers — keeps the raw map so forward-compatible
- *  fields are never lost. Package-private. */
 abstract class Model {
     protected final Map<String, Object> raw;
 
@@ -12,9 +13,40 @@ abstract class Model {
         this.raw = raw == null ? Collections.emptyMap() : raw;
     }
 
-    /** The underlying parsed JSON object (read-only view of what the API returned). */
     public Map<String, Object> raw() {
         return raw;
+    }
+
+    public BigDecimal decimal(String key) {
+        Object value = raw.get(key);
+        if (value instanceof BigDecimal) return (BigDecimal) value;
+        if (value instanceof Number || value instanceof String) {
+            try { return new BigDecimal(value.toString()); }
+            catch (NumberFormatException ignored) { return null; }
+        }
+        return null;
+    }
+
+    protected Map<String, Object> map(String key) {
+        Object value = raw.get(key);
+        if (!(value instanceof Map)) return Collections.emptyMap();
+        @SuppressWarnings("unchecked")
+        Map<String, Object> result = (Map<String, Object>) value;
+        return result;
+    }
+
+    protected List<Map<String, Object>> maps(String key) {
+        Object value = raw.get(key);
+        if (!(value instanceof List)) return Collections.emptyList();
+        List<Map<String, Object>> result = new ArrayList<>();
+        for (Object item : (List<?>) value) {
+            if (item instanceof Map) {
+                @SuppressWarnings("unchecked")
+                Map<String, Object> row = (Map<String, Object>) item;
+                result.add(row);
+            }
+        }
+        return result;
     }
 
     protected String str(String key) {
@@ -27,7 +59,6 @@ abstract class Model {
         return Boolean.TRUE.equals(v);
     }
 
-    /** Numbers may arrive as Long or Double from the JSON parser. */
     protected Long longVal(String key) {
         Object v = raw.get(key);
         if (v instanceof Number) return ((Number) v).longValue();
@@ -35,8 +66,7 @@ abstract class Model {
     }
 
     protected Double doubleVal(String key) {
-        Object v = raw.get(key);
-        if (v instanceof Number) return ((Number) v).doubleValue();
-        return null;
+        BigDecimal value = decimal(key);
+        return value == null ? null : value.doubleValue();
     }
 }
