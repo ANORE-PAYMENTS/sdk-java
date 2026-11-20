@@ -179,7 +179,7 @@ public final class ContractTest {
                 equal(requests.get(), 1);
                 equal(error.getSubscriptionId(), 42L);
                 equal(error.getDetail("error"), "binding_reconciling");
-                equal(error.getData().get("subscriptionId"), 42L);
+                equal(error.getDetails().get("subscriptionId"), 42L);
                 for (Object invalid : Arrays.asList(0L, -1L, new BigInteger("9223372036854775808"),
                         new BigDecimal("42.5"), 42.0d, "0", "01", "9223372036854775808", "42.0")) {
                     Map<String, Object> details = new java.util.LinkedHashMap<>();

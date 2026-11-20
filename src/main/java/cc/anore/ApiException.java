@@ -37,11 +37,6 @@ public class ApiException extends AnoreException {
         return details;
     }
 
-    /** Alias matching the API's structured error-data terminology. */
-    public Map<String, Object> getData() {
-        return details;
-    }
-
     public Object getDetail(String name) {
         return details.get(name);
     }
