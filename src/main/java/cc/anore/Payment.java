@@ -1,10 +1,19 @@
 package cc.anore;
 
+import java.util.LinkedHashMap;
 import java.util.Map;
 
 public final class Payment extends Model {
     Payment(Map<String, Object> raw) {
-        super(raw);
+        super(withoutProtectedInput(raw));
+    }
+
+    private static Map<String, Object> withoutProtectedInput(Map<String, Object> raw) {
+        if (raw == null) return null;
+        Map<String, Object> safe = new LinkedHashMap<>(raw);
+        safe.remove("user_identity");
+        safe.remove("franchise");
+        return safe;
     }
 
     public boolean success() {

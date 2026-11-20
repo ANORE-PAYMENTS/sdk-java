@@ -18,7 +18,7 @@ import javax.crypto.spec.SecretKeySpec;
 public final class AnoreClient {
 
     public static final String DEFAULT_BASE_URL = "https://api.anore.cc/api/v1";
-    private static final String USER_AGENT = "anore-java/1.2.0";
+    private static final String USER_AGENT = "anore-java/1.3.0";
 
     private final String baseUrl;
     private final String apiKey;
@@ -66,6 +66,30 @@ public final class AnoreClient {
         return new PaymentList(request("GET", "/payments?" + p.toQuery(), null));
     }
 
+    public SubscriptionCatalog getSubscriptionCatalog() {
+        return new SubscriptionCatalog(request("GET", "/subscriptions/catalog", null));
+    }
+
+    public SubscriptionBinding createSubscription(CreateSubscriptionParams params) {
+        if (params == null) throw new IllegalArgumentException("createSubscription: params required");
+        Map<String, String> headers = new LinkedHashMap<>();
+        headers.put("Idempotency-Key", params.idempotencyKey);
+        return new SubscriptionBinding(request("POST", "/subscriptions", params.toBody(), headers));
+    }
+
+    public SubscriptionStatus getSubscription(long id) {
+        if (id <= 0) throw new IllegalArgumentException("getSubscription: id must be > 0");
+        return new SubscriptionStatus(request("GET", "/subscriptions/" + id, null));
+    }
+
+    public SubscriptionCharge chargeSubscription(long id, String idempotencyKey) {
+        if (id <= 0) throw new IllegalArgumentException("chargeSubscription: id must be > 0");
+        validateIdempotencyKey(idempotencyKey, "chargeSubscription");
+        Map<String, String> headers = new LinkedHashMap<>();
+        headers.put("Idempotency-Key", idempotencyKey);
+        return new SubscriptionCharge(request("POST", "/subscriptions/" + id + "/charges", null, headers));
+    }
+
     public Balance getBalance(Long shopId) {
         return new Balance(request("GET", shopPath("/balance", shopId), null));
     }
@@ -83,6 +107,11 @@ public final class AnoreClient {
     }
 
     public PayoutRates getPayoutRates() { return getPayoutRates(null); }
+
+    public PayoutList listPayouts(ListPayoutsParams params) {
+        ListPayoutsParams p = params == null ? new ListPayoutsParams() : params;
+        return new PayoutList(request("GET", "/payouts?" + p.toQuery(), null));
+    }
 
     public Payout createPayout(CreatePayoutParams params) {
         if (params == null) throw new IllegalArgumentException("createPayout: params required");
@@ -117,6 +146,11 @@ public final class AnoreClient {
     }
 
     private Map<String, Object> request(String method, String path, Map<String, Object> body) {
+        return request(method, path, body, java.util.Collections.emptyMap());
+    }
+
+    private Map<String, Object> request(String method, String path, Map<String, Object> body,
+                                        Map<String, String> headers) {
         String payload = body == null ? null : Json.write(body);
         int retries = "GET".equals(method) ? maxRetries : 0;
 
@@ -129,6 +163,9 @@ public final class AnoreClient {
                     .header("Authorization", "Bearer " + apiKey)
                     .header("User-Agent", USER_AGENT)
                     .header("Accept", "application/json");
+            for (Map.Entry<String, String> header : headers.entrySet()) {
+                rb.header(header.getKey(), header.getValue());
+            }
 
             if (payload != null) {
                 rb.header("Content-Type", "application/json");
@@ -167,7 +204,7 @@ public final class AnoreClient {
                     data = java.util.Collections.emptyMap();
                 }
                 String message = message(data, "API returned HTTP " + code);
-                throw ApiException.forStatus(code, message, requestId);
+                throw ApiException.forStatus(code, message, requestId, data);
             } catch (java.io.IOException | InterruptedException e) {
                 lastConn = new ApiConnectionException("could not reach anore API: " + e.getMessage(), e);
                 if (e instanceof InterruptedException) {
@@ -243,6 +280,8 @@ public final class AnoreClient {
         private String failUrl;
         private String email;
         private String callbackUrl;
+        private UserIdentity userIdentity;
+        private Franchise franchise;
 
         private CreatePaymentParams(BigDecimal amount, String description) {
             this.amount = amount;
@@ -283,6 +322,16 @@ public final class AnoreClient {
 
         public CreatePaymentParams callbackUrl(String callbackUrl) { this.callbackUrl = callbackUrl; return this; }
 
+        public CreatePaymentParams userIdentity(UserIdentity userIdentity) {
+            if (userIdentity == null) throw new IllegalArgumentException("createPayment: userIdentity is required");
+            this.userIdentity = userIdentity; return this;
+        }
+
+        public CreatePaymentParams franchise(Franchise franchise) {
+            if (franchise == null) throw new IllegalArgumentException("createPayment: franchise is required");
+            this.franchise = franchise; return this;
+        }
+
         Map<String, Object> toBody() {
             Map<String, Object> b = new LinkedHashMap<>();
             b.put("amount", amount);
@@ -296,6 +345,8 @@ public final class AnoreClient {
             if (failUrl != null) b.put("failurl", failUrl);
             if (email != null) b.put("email", email);
             if (callbackUrl != null) b.put("callbackUrl", callbackUrl);
+            if (userIdentity != null) b.put("user_identity", userIdentity.toBody());
+            if (franchise != null) b.put("franchise", franchise.toBody());
             return b;
         }
     }
@@ -339,6 +390,79 @@ public final class AnoreClient {
             }
             return out.toString();
         }
+    }
+
+    public static final class CreateSubscriptionParams {
+        private final String planId;
+        private final String customerId;
+        private final String customerEmail;
+        private final String idempotencyKey;
+        private Long shopId;
+
+        private CreateSubscriptionParams(String planId, String customerId, String customerEmail,
+                                         String idempotencyKey) {
+            this.planId = requiredBounded(planId, "createSubscription: planId", 80);
+            this.customerId = requiredBounded(customerId, "createSubscription: customerId", 128);
+            this.customerEmail = Validation.email(customerEmail, "createSubscription: customerEmail", 254);
+            validateIdempotencyKey(idempotencyKey, "createSubscription");
+            this.idempotencyKey = idempotencyKey;
+        }
+
+        public static CreateSubscriptionParams of(String planId, String customerId,
+                                                  String customerEmail, String idempotencyKey) {
+            return new CreateSubscriptionParams(planId, customerId, customerEmail, idempotencyKey);
+        }
+
+        public CreateSubscriptionParams shopId(long shopId) {
+            if (shopId <= 0) throw new IllegalArgumentException("shopId must be > 0");
+            this.shopId = shopId; return this;
+        }
+
+        Map<String, Object> toBody() {
+            Map<String, Object> body = new LinkedHashMap<>();
+            body.put("planId", planId);
+            body.put("customerId", customerId);
+            body.put("customerEmail", customerEmail);
+            if (shopId != null) body.put("shopId", shopId);
+            return body;
+        }
+    }
+
+    public static final class ListPayoutsParams {
+        private Long shopId;
+        private int limit = 50;
+        private String cursor;
+
+        public ListPayoutsParams shopId(long shopId) {
+            if (shopId <= 0) throw new IllegalArgumentException("shopId must be > 0");
+            this.shopId = shopId; return this;
+        }
+        public ListPayoutsParams limit(int limit) {
+            if (limit < 1 || limit > 100) throw new IllegalArgumentException("limit must be between 1 and 100");
+            this.limit = limit; return this;
+        }
+        public ListPayoutsParams cursor(String cursor) { this.cursor = cursor; return this; }
+
+        String toQuery() {
+            StringBuilder out = new StringBuilder("limit=").append(limit);
+            if (shopId != null) out.append("&shopId=").append(encode(shopId.toString()));
+            if (cursor != null) out.append("&cursor=").append(encode(cursor));
+            return out.toString();
+        }
+    }
+
+    private static void validateIdempotencyKey(String value, String operation) {
+        if (value == null || value.trim().isEmpty() || value.length() > 128) {
+            throw new IllegalArgumentException(operation + ": idempotencyKey must contain 1 to 128 characters");
+        }
+    }
+
+    private static String requiredBounded(String value, String label, int maxLength) {
+        if (value == null || value.trim().isEmpty()) throw new IllegalArgumentException(label + " is required");
+        if (value.length() > maxLength) {
+            throw new IllegalArgumentException(label + " must contain at most " + maxLength + " characters");
+        }
+        return value;
     }
 
     public static final class CreatePayoutParams {
