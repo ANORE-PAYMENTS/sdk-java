@@ -126,6 +126,9 @@ public final class ContractTest {
                 payload = Json.parseObject(body);
                 equal(payload.get("user_identity"), Json.parseObject("{\"type\":\"email\",\"value\":\"buyer@example.com\"}"));
                 equal(payload.get("franchise"), Json.parseObject("{\"type\":\"website\",\"address\":\"https://xn--bcher-kva.example\",\"owner_telegram_id\":\"1\"}"));
+                client(origin).createPayment(AnoreClient.CreatePaymentParams.of(10, "ipv6")
+                        .franchise(Franchise.website("https://[2001:DB8::1]/", "1")));
+                equal(Json.parseObject(body).get("franchise"), Json.parseObject("{\"type\":\"website\",\"address\":\"https://[2001:db8::1]\",\"owner_telegram_id\":\"1\"}"));
                 client(origin).createPayment(AnoreClient.CreatePaymentParams.of(10, "normalized")
                         .userIdentity(UserIdentity.username("  ＢＵＹＥＲ＿NAME  "))
                         .franchise(Franchise.telegramBot("@BRANCH_BOT", "1").ownerTelegramUsername("@OWNER_NAME")));

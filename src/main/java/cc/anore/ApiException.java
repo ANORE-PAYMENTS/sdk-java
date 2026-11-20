@@ -7,6 +7,8 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 
 public class ApiException extends AnoreException {
+    private static final long serialVersionUID = 2215628946983494079L;
+
     private final int status;
     private final String requestId;
     private final Map<String, Object> details;
