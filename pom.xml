@@ -6,12 +6,12 @@
 
   <groupId>cc.anore</groupId>
   <artifactId>anore</artifactId>
-  <version>1.2.0</version>
+  <version>1.3.0</version>
   <packaging>jar</packaging>
 
-  <name>anore</name>
-  <description>Official anore payments SDK for Java — accept SBP, cards and crypto payments. Zero dependencies, JDK 11+.</description>
-  <url>https://anore.cc/docs</url>
+  <name>ANORE Java SDK</name>
+  <description>Official ANORE payments SDK for Java — payments, subscriptions and payouts. Zero runtime dependencies, JDK 11+.</description>
+  <url>https://github.com/ANORE-PAYMENTS/sdk-java</url>
 
   <licenses>
     <license>
@@ -21,9 +21,18 @@
   </licenses>
 
   <scm>
-    <url>https://github.com/anore-payments/sdk-java</url>
-    <connection>scm:git:https://github.com/anore-payments/sdk-java.git</connection>
+    <url>https://github.com/ANORE-PAYMENTS/sdk-java</url>
+    <connection>scm:git:https://github.com/ANORE-PAYMENTS/sdk-java.git</connection>
+    <developerConnection>scm:git:ssh://git@github.com/ANORE-PAYMENTS/sdk-java.git</developerConnection>
+    <tag>HEAD</tag>
   </scm>
+
+  <developers>
+    <developer>
+      <name>ANORE Payments</name>
+      <url>https://anore.cc</url>
+    </developer>
+  </developers>
 
   <properties>
     <maven.compiler.release>11</maven.compiler.release>
