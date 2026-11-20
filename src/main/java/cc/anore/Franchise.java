@@ -59,14 +59,18 @@ public final class Franchise {
             URI uri = URI.create(value);
             String path = uri.getRawPath();
             String authority = uri.getRawAuthority();
+            String uriHost = uri.getHost();
+            boolean ipv6 = authority != null && authority.startsWith("[") && authority.endsWith("]")
+                    && uriHost != null && uriHost.indexOf(':') >= 0;
             if (!"https".equalsIgnoreCase(uri.getScheme()) || authority == null
                     || uri.getUserInfo() != null || uri.getPort() != -1
-                    || authority.indexOf('@') >= 0 || authority.indexOf(':') >= 0
+                    || authority.indexOf('@') >= 0 || (!ipv6 && authority.indexOf(':') >= 0)
                     || uri.getRawQuery() != null || uri.getRawFragment() != null
                     || !(path == null || path.isEmpty() || "/".equals(path))) {
                 throw new IllegalArgumentException();
             }
-            String host = IDN.toASCII(authority, IDN.ALLOW_UNASSIGNED).toLowerCase(Locale.ROOT);
+            if (ipv6) return "https://" + uriHost.toLowerCase(Locale.ROOT);
+            String host = IDN.toASCII(authority).toLowerCase(Locale.ROOT);
             if (host.endsWith(".")) host = host.substring(0, host.length() - 1);
             if (host.isEmpty()) throw new IllegalArgumentException();
             return "https://" + host;
