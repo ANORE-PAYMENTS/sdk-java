@@ -32,10 +32,11 @@ java/
 <dependency>
   <groupId>com.github.ANORE-PAYMENTS</groupId>
   <artifactId>sdk-java</artifactId>
-  <version>main-SNAPSHOT</version>
-  <!-- До появления release-тега; после публикации замените на 1.3.0. -->
+  <version>d69cdfd67a0105b9d719624d845f0e6a778721f2</version>
 </dependency>
 ```
+
+Сейчас документация фиксирует проверенный commit-SHA, чтобы зависимость разрешалась без плавающего snapshot. Стабильная координата `1.3.0` станет доступна только после отдельно одобренного создания тега `1.3.0`; этот PR тег не создаёт и ничего не публикует.
 
 Либо просто скопируйте папку `cc/anore/` в проект — зависимостей нет.
 
