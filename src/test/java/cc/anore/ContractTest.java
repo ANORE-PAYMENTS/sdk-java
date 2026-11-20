@@ -23,6 +23,7 @@ public final class ContractTest {
     private static volatile String authorization;
     private static volatile String signature;
     private static volatile String userAgent;
+    private static volatile String idempotencyKey;
     private static volatile String overrideBody;
     private static volatile int overrideStatus;
     private static volatile int failuresLeft;
@@ -40,6 +41,7 @@ public final class ContractTest {
             authorization = exchange.getRequestHeaders().getFirst("Authorization");
             signature = exchange.getRequestHeaders().getFirst("X-ZPay-Signature");
             userAgent = exchange.getRequestHeaders().getFirst("User-Agent");
+            idempotencyKey = exchange.getRequestHeaders().getFirst("Idempotency-Key");
             int status = overrideStatus == 0 ? 200 : overrideStatus;
             String response = overrideBody == null ? fixture(path) : overrideBody;
             if (failuresLeft > 0) {
@@ -83,7 +85,7 @@ public final class ContractTest {
                 equal(payload.get("failurl"), "https://example.test/fail");
                 equal(signature, AnoreClient.hmacHex("api-secret", body));
                 equal(authorization, "Bearer fixture-key");
-                equal(userAgent, "anore-java/1.2.0");
+                equal(userAgent, "anore-java/1.3.0");
                 equal(value.decimal("amount"), new BigDecimal("13.25"));
                 equal(value.decimal("rubAmount"), new BigDecimal("1141.4875"));
                 equal(value.currency(), "usd");
@@ -99,6 +101,82 @@ public final class ContractTest {
                 int count = 0;
                 for (Payment ignored : page) count++;
                 equal(count, 1);
+            });
+            run("payment context is validated, mapped, and excluded from models", () -> {
+                Payment payment = client(origin).createPayment(AnoreClient.CreatePaymentParams.of(10, "context")
+                        .userIdentity(UserIdentity.telegramId("123456789").telegramUsername("@customer_name"))
+                        .franchise(Franchise.telegramBot("@branch_bot", "987654321")
+                                .ownerTelegramUsername("branch_owner")));
+                Map<String, Object> payload = Json.parseObject(body);
+                equal(payload.get("user_identity"), Json.parseObject("{\"type\":\"telegram_id\",\"value\":\"123456789\",\"telegram_username\":\"@customer_name\"}"));
+                equal(payload.get("franchise"), Json.parseObject("{\"type\":\"telegram_bot\",\"address\":\"@branch_bot\",\"owner_telegram_id\":\"987654321\",\"owner_telegram_username\":\"branch_owner\"}"));
+                check(!payment.raw().containsKey("user_identity"));
+                check(!payment.raw().containsKey("franchise"));
+                int before = requests.get();
+                expect(IllegalArgumentException.class, () -> UserIdentity.telegramId("01"));
+                expect(IllegalArgumentException.class, () -> UserIdentity.telegramId("9223372036854775808"));
+                expect(IllegalArgumentException.class, () -> UserIdentity.email("buyer@example.com").telegramUsername("buyer_name"));
+                expect(IllegalArgumentException.class, () -> Franchise.telegramBot("bot", "1"));
+                expect(IllegalArgumentException.class, () -> Franchise.website("http://branch.example", "1"));
+                expect(IllegalArgumentException.class, () -> Franchise.website("https://branch.example/path", "1"));
+                equal(requests.get(), before);
+                client(origin).createPayment(AnoreClient.CreatePaymentParams.of(10, "site")
+                        .franchise(Franchise.website("https://branch.example", "1")));
+            });
+            run("subscription catalog create status and charge contracts", () -> {
+                SubscriptionCatalog catalog = client(origin).getSubscriptionCatalog();
+                equal(path, "/api/v1/subscriptions/catalog");
+                check(catalog.shopIdRequired());
+                SubscriptionBinding binding = client(origin).createSubscription(
+                        AnoreClient.CreateSubscriptionParams.of("plan", "customer", "buyer@example.com", "binding-key").shopId(7));
+                equal(path, "/api/v1/subscriptions");
+                equal(idempotencyKey, "binding-key");
+                equal(binding.subscriptionId(), 42L);
+                Map<String, Object> payload = Json.parseObject(body);
+                equal(payload.get("planId"), "plan");
+                equal(payload.get("shopId"), 7L);
+                check(!payload.containsKey("idempotencyKey"));
+                SubscriptionStatus status = client(origin).getSubscription(42);
+                equal(status.planTitle(), "Plan");
+                SubscriptionCharge charge = client(origin).chargeSubscription(42, "charge-key");
+                equal(path, "/api/v1/subscriptions/42/charges");
+                equal(idempotencyKey, "charge-key");
+                equal(charge.chargeId(), "charge-1");
+                equal(body, "");
+            });
+            run("subscription idempotency keys reject invalid input before network", () -> {
+                for (String key : Arrays.asList("", "   ", "x".repeat(129))) {
+                    expect(IllegalArgumentException.class, () -> AnoreClient.CreateSubscriptionParams.of("p", "c", "e", key));
+                    expect(IllegalArgumentException.class, () -> client(origin).chargeSubscription(1, key));
+                }
+                equal(requests.get(), 0);
+            });
+            run("binding reconciliation exposes structured details without retry", () -> {
+                overrideStatus = 503;
+                overrideBody = "{\"success\":false,\"error\":\"binding_reconciling\",\"message\":\"reconciling\",\"subscriptionId\":42}";
+                ServerException error = expect(ServerException.class, () -> client(origin).createSubscription(
+                        AnoreClient.CreateSubscriptionParams.of("p", "c", "e", "same-key")));
+                equal(requests.get(), 1);
+                equal(error.getSubscriptionId(), 42L);
+                equal(error.getDetail("error"), "binding_reconciling");
+                equal(error.getData().get("subscriptionId"), 42L);
+            });
+            run("subscription charge POST is never retried", () -> {
+                overrideStatus = 429;
+                overrideBody = "{\"message\":\"slow down\"}";
+                expect(ApiException.class, () -> client(origin).chargeSubscription(42, "charge-key"));
+                equal(requests.get(), 1);
+            });
+            run("payout list cursor contract", () -> {
+                PayoutList payouts = client(origin).listPayouts(new AnoreClient.ListPayoutsParams().shopId(7).limit(25).cursor("cursor +"));
+                equal(query, "limit=25&shopId=7&cursor=cursor%20%2B");
+                equal(payouts.items().get(0).id(), "WD-509");
+                check(payouts.hasMore());
+                equal(payouts.nextCursor(), "next");
+                int count = 0;
+                for (Payout ignored : payouts) count++;
+                equal(count, 1);
+                expect(IllegalArgumentException.class, () -> new AnoreClient.ListPayoutsParams().limit(101));
             });
             run("shop-scoped balance and method-specific bounds", () -> {
                 Balance balance = client(origin).getBalance();
@@ -284,6 +362,11 @@ public final class ContractTest {
     }
 
     private static String fixture(String requestPath) {
+        if (requestPath.endsWith("/subscriptions/catalog")) return "{\"success\":true,\"shopIdRequired\":true,\"environment\":\"live\",\"shops\":[]}";
+        if (requestPath.endsWith("/subscriptions/42/charges")) return "{\"success\":true,\"subscriptionId\":42,\"chargeId\":\"charge-1\",\"status\":\"creating\"}";
+        if (requestPath.endsWith("/subscriptions/42")) return "{\"success\":true,\"subscriptionId\":42,\"shopId\":7,\"planId\":\"plan\",\"planTitle\":\"Plan\",\"status\":\"active\",\"customerId\":\"customer\",\"customerEmail\":\"buyer@example.com\",\"amount\":10,\"environment\":\"live\"}";
+        if (requestPath.endsWith("/subscriptions")) return "{\"success\":true,\"subscriptionId\":42,\"shopId\":7,\"status\":\"binding_pending\",\"qrUrl\":\"https://qr.nspk.ru/x\",\"environment\":\"live\"}";
+        if (requestPath.endsWith("/payouts") && body.isEmpty()) return "{\"shopId\":7,\"limit\":25,\"items\":[{\"id\":\"WD-509\",\"status\":\"pending\"}],\"hasMore\":true,\"nextCursor\":\"next\"}";
         if (requestPath.endsWith("/payouts/fees")) return "{\"shopId\":7,\"currency\":\"RUB\",\"maxAmountRubByMethod\":{\"usdt_erc20\":1500000},\"methods\":" + FEES + "}";
         if (requestPath.endsWith("/payouts/rates")) return "{\"ratePolicy\":\"approval\",\"rateBasis\":\"fixed_0900_msk\",\"sbpRatePolicy\":\"execution\",\"rapiraFixing\":\"09:00 Europe/Moscow\",\"fees\":" + FEES + "}";
         if (requestPath.endsWith("/balance")) return "{\"available\":9000.25,\"shopLocalBalance\":9100.25,\"rateBasis\":\"fixed_0900_msk\",\"minAmountByMethod\":{\"card_rub\":3000},\"maxAmountByMethod\":{\"usdt_erc20\":1500000},\"fee\":{\"methods\":" + FEES + "}}";
