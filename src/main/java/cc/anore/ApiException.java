@@ -1,5 +1,7 @@
 package cc.anore;
 
+import java.math.BigDecimal;
+import java.math.BigInteger;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -46,7 +48,25 @@ public class ApiException extends AnoreException {
 
     public Long getSubscriptionId() {
         Object value = details.get("subscriptionId");
-        return value instanceof Number ? ((Number) value).longValue() : null;
+        try {
+            BigInteger integer;
+            if (value instanceof BigInteger) {
+                integer = (BigInteger) value;
+            } else if (value instanceof BigDecimal) {
+                integer = ((BigDecimal) value).toBigIntegerExact();
+            } else if (value instanceof Byte || value instanceof Short
+                    || value instanceof Integer || value instanceof Long) {
+                integer = BigInteger.valueOf(((Number) value).longValue());
+            } else if (value instanceof String && ((String) value).matches("[1-9][0-9]{0,18}")) {
+                integer = new BigInteger((String) value);
+            } else {
+                return null;
+            }
+            if (integer.signum() <= 0 || integer.compareTo(BigInteger.valueOf(Long.MAX_VALUE)) > 0) return null;
+            return integer.longValueExact();
+        } catch (ArithmeticException ignored) {
+            return null;
+        }
     }
 
     public static ApiException forStatus(int status, String message, String requestId) {

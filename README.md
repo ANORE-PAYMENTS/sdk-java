@@ -32,7 +32,8 @@ java/
 <dependency>
   <groupId>com.github.ANORE-PAYMENTS</groupId>
   <artifactId>sdk-java</artifactId>
-  <version>1.3.0</version>
+  <version>main-SNAPSHOT</version>
+  <!-- До появления release-тега; после публикации замените на 1.3.0. -->
 </dependency>
 ```
 
@@ -91,7 +92,7 @@ SubscriptionStatus subscription = anore.getSubscription(binding.subscriptionId()
 SubscriptionCharge charge = anore.chargeSubscription(binding.subscriptionId(), "charge-2026-11");
 ```
 
-`Idempotency-Key` для обоих subscription POST обязателен и всегда задаётся вызывающим кодом (1–128 непробельных символов). SDK никогда автоматически не повторяет POST. При `503 binding_reconciling` прочитайте `error.getSubscriptionId()` или `error.getDetails()`, затем проверяйте `getSubscription(id)`; сохраните тот же ключ и идентичное тело, не создавайте новый POST параллельно.
+`Idempotency-Key` для обоих subscription POST обязателен и всегда задаётся вызывающим кодом (1–128 непробельных символов). SDK никогда автоматически не повторяет POST. При `503 binding_reconciling` сохраните точные ключ и тело и не создавайте новый ключ, повторный или параллельный POST. Если ответ содержит корректный `subscriptionId`, получите его через `error.getSubscriptionId()` и проверяйте `getSubscription(id)`; если ID отсутствует или некорректен, не пытайтесь угадать его — дождитесь reconciliation либо следуйте указаниям оператора/API.
 
 ## Проверка вебхука
 
@@ -148,6 +149,6 @@ try {
 | `Webhooks.verify(rawBody, signature, secret)` | проверка подписи → `boolean` |
 | `Webhooks.parse(rawBody, signature, secret)` | проверка + разбор → `WebhookEvent` (бросает `SignatureException`) |
 
-Ошибки API сохраняют статус, request ID и полный разобранный объект через `ApiException.getDetails()`; для reconciliation доступен `getSubscriptionId()`. Классы: `ValidationException` (400), `AuthenticationException` (401), `ForbiddenException` (403), `NotFoundException` (404), `ServerException` (5xx), `ApiConnectionException` (сеть), `SignatureException` (подпись). База — `AnoreException`.
+Ошибки API сохраняют статус, request ID и полный разобранный объект через `ApiException.getDetails()`; `getSubscriptionId()` возвращает положительный int64 ID, только если он действительно присутствует и корректен, иначе `null`. Классы: `ValidationException` (400), `AuthenticationException` (401), `ForbiddenException` (403), `NotFoundException` (404), `ServerException` (5xx), `ApiConnectionException` (сеть), `SignatureException` (подпись). База — `AnoreException`.
 
 Полная документация: https://anore.cc/docs

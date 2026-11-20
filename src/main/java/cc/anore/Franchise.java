@@ -1,7 +1,9 @@
 package cc.anore;
 
+import java.net.IDN;
 import java.net.URI;
 import java.util.LinkedHashMap;
+import java.util.Locale;
 import java.util.Map;
 
 /** Validated franchise routing metadata accepted only by payment creation. */
@@ -20,12 +22,11 @@ public final class Franchise {
         }
         Validation.telegramId(ownerTelegramId, "franchise.ownerTelegramId");
         if (TELEGRAM_BOT.equals(type)) {
-            Validation.telegramUsername(address, "franchise.address");
+            this.address = Validation.telegramUsername(address, "franchise.address");
         } else {
-            validateWebsite(address);
+            this.address = canonicalWebsite(address);
         }
         this.type = type;
-        this.address = address;
         this.ownerTelegramId = ownerTelegramId;
     }
 
@@ -40,8 +41,7 @@ public final class Franchise {
     }
 
     public Franchise ownerTelegramUsername(String value) {
-        Validation.telegramUsername(value, "franchise.ownerTelegramUsername");
-        this.ownerTelegramUsername = value;
+        this.ownerTelegramUsername = Validation.telegramUsername(value, "franchise.ownerTelegramUsername");
         return this;
     }
 
@@ -54,16 +54,22 @@ public final class Franchise {
         return body;
     }
 
-    private static void validateWebsite(String value) {
+    private static String canonicalWebsite(String value) {
         try {
             URI uri = URI.create(value);
             String path = uri.getRawPath();
-            if (!"https".equals(uri.getScheme()) || uri.getHost() == null
+            String authority = uri.getRawAuthority();
+            if (!"https".equalsIgnoreCase(uri.getScheme()) || authority == null
                     || uri.getUserInfo() != null || uri.getPort() != -1
+                    || authority.indexOf('@') >= 0 || authority.indexOf(':') >= 0
                     || uri.getRawQuery() != null || uri.getRawFragment() != null
                     || !(path == null || path.isEmpty() || "/".equals(path))) {
                 throw new IllegalArgumentException();
             }
+            String host = IDN.toASCII(authority, IDN.ALLOW_UNASSIGNED).toLowerCase(Locale.ROOT);
+            if (host.endsWith(".")) host = host.substring(0, host.length() - 1);
+            if (host.isEmpty()) throw new IllegalArgumentException();
+            return "https://" + host;
         } catch (RuntimeException error) {
             throw new IllegalArgumentException("franchise.address must be a canonical HTTPS origin");
         }
