@@ -21,11 +21,11 @@ public final class UserIdentity {
         }
         if (TELEGRAM_ID.equals(type)) {
             Validation.telegramId(value, "userIdentity.value");
-        } else if (value == null || value.trim().isEmpty() || value.length() > 190) {
-            throw new IllegalArgumentException("userIdentity.value must contain 1 to 190 characters");
+            this.value = value;
+        } else {
+            this.value = Validation.identityValue(type, value, "userIdentity.value");
         }
         this.type = type;
-        this.value = value;
     }
 
     public static UserIdentity of(String type, String value) { return new UserIdentity(type, value); }
@@ -38,8 +38,7 @@ public final class UserIdentity {
         if (!TELEGRAM_ID.equals(type)) {
             throw new IllegalArgumentException("userIdentity.telegramUsername is allowed only with telegram_id");
         }
-        Validation.telegramUsername(value, "userIdentity.telegramUsername");
-        this.telegramUsername = value;
+        this.telegramUsername = Validation.telegramUsername(value, "userIdentity.telegramUsername");
         return this;
     }
 

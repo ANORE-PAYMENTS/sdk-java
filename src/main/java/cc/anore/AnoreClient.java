@@ -401,9 +401,9 @@ public final class AnoreClient {
 
         private CreateSubscriptionParams(String planId, String customerId, String customerEmail,
                                          String idempotencyKey) {
-            this.planId = required(planId, "createSubscription: planId");
-            this.customerId = required(customerId, "createSubscription: customerId");
-            this.customerEmail = required(customerEmail, "createSubscription: customerEmail");
+            this.planId = requiredBounded(planId, "createSubscription: planId", 80);
+            this.customerId = requiredBounded(customerId, "createSubscription: customerId", 128);
+            this.customerEmail = Validation.email(customerEmail, "createSubscription: customerEmail", 254);
             validateIdempotencyKey(idempotencyKey, "createSubscription");
             this.idempotencyKey = idempotencyKey;
         }
@@ -457,8 +457,11 @@ public final class AnoreClient {
         }
     }
 
-    private static String required(String value, String label) {
+    private static String requiredBounded(String value, String label, int maxLength) {
         if (value == null || value.trim().isEmpty()) throw new IllegalArgumentException(label + " is required");
+        if (value.length() > maxLength) {
+            throw new IllegalArgumentException(label + " must contain at most " + maxLength + " characters");
+        }
         return value;
     }
 

@@ -108,8 +108,8 @@ public final class ContractTest {
                         .franchise(Franchise.telegramBot("@branch_bot", "987654321")
                                 .ownerTelegramUsername("branch_owner")));
                 Map<String, Object> payload = Json.parseObject(body);
-                equal(payload.get("user_identity"), Json.parseObject("{\"type\":\"telegram_id\",\"value\":\"123456789\",\"telegram_username\":\"@customer_name\"}"));
-                equal(payload.get("franchise"), Json.parseObject("{\"type\":\"telegram_bot\",\"address\":\"@branch_bot\",\"owner_telegram_id\":\"987654321\",\"owner_telegram_username\":\"branch_owner\"}"));
+                equal(payload.get("user_identity"), Json.parseObject("{\"type\":\"telegram_id\",\"value\":\"123456789\",\"telegram_username\":\"customer_name\"}"));
+                equal(payload.get("franchise"), Json.parseObject("{\"type\":\"telegram_bot\",\"address\":\"branch_bot\",\"owner_telegram_id\":\"987654321\",\"owner_telegram_username\":\"branch_owner\"}"));
                 check(!payment.raw().containsKey("user_identity"));
                 check(!payment.raw().containsKey("franchise"));
                 int before = requests.get();
@@ -121,7 +121,23 @@ public final class ContractTest {
                 expect(IllegalArgumentException.class, () -> Franchise.website("https://branch.example/path", "1"));
                 equal(requests.get(), before);
                 client(origin).createPayment(AnoreClient.CreatePaymentParams.of(10, "site")
-                        .franchise(Franchise.website("https://branch.example", "1")));
+                        .userIdentity(UserIdentity.email("  Buyer@Example.COM  "))
+                        .franchise(Franchise.website("HTTPS://BÜCHER.Example/", "1")));
+                payload = Json.parseObject(body);
+                equal(payload.get("user_identity"), Json.parseObject("{\"type\":\"email\",\"value\":\"buyer@example.com\"}"));
+                equal(payload.get("franchise"), Json.parseObject("{\"type\":\"website\",\"address\":\"https://xn--bcher-kva.example\",\"owner_telegram_id\":\"1\"}"));
+                client(origin).createPayment(AnoreClient.CreatePaymentParams.of(10, "normalized")
+                        .userIdentity(UserIdentity.username("  ＢＵＹＥＲ＿NAME  "))
+                        .franchise(Franchise.telegramBot("@BRANCH_BOT", "1").ownerTelegramUsername("@OWNER_NAME")));
+                payload = Json.parseObject(body);
+                equal(payload.get("user_identity"), Json.parseObject("{\"type\":\"username\",\"value\":\"buyer_name\"}"));
+                equal(payload.get("franchise"), Json.parseObject("{\"type\":\"telegram_bot\",\"address\":\"branch_bot\",\"owner_telegram_id\":\"1\",\"owner_telegram_username\":\"owner_name\"}"));
+                client(origin).createPayment(AnoreClient.CreatePaymentParams.of(10, "external")
+                        .userIdentity(UserIdentity.externalId("  ＣＲＭ-42  ")));
+                equal(Json.parseObject(body).get("user_identity"), Json.parseObject("{\"type\":\"external_id\",\"value\":\"CRM-42\"}"));
+                expect(IllegalArgumentException.class, () -> UserIdentity.email("buyer" + (char) 0 + "@example.com"));
+                expect(IllegalArgumentException.class, () -> UserIdentity.externalId(" \t\n "));
+                expect(IllegalArgumentException.class, () -> UserIdentity.username("x".repeat(191)));
             });
             run("subscription catalog create status and charge contracts", () -> {
                 SubscriptionCatalog catalog = client(origin).getSubscriptionCatalog();
@@ -146,20 +162,38 @@ public final class ContractTest {
             });
             run("subscription idempotency keys reject invalid input before network", () -> {
                 for (String key : Arrays.asList("", "   ", "x".repeat(129))) {
-                    expect(IllegalArgumentException.class, () -> AnoreClient.CreateSubscriptionParams.of("p", "c", "e", key));
+                    expect(IllegalArgumentException.class, () -> AnoreClient.CreateSubscriptionParams.of("p", "c", "e@example.com", key));
                     expect(IllegalArgumentException.class, () -> client(origin).chargeSubscription(1, key));
                 }
+                expect(IllegalArgumentException.class, () -> AnoreClient.CreateSubscriptionParams.of("x".repeat(81), "c", "e@example.com", "key"));
+                expect(IllegalArgumentException.class, () -> AnoreClient.CreateSubscriptionParams.of("p", "x".repeat(129), "e@example.com", "key"));
+                expect(IllegalArgumentException.class, () -> AnoreClient.CreateSubscriptionParams.of("p", "c", "not-an-email", "key"));
+                expect(IllegalArgumentException.class, () -> AnoreClient.CreateSubscriptionParams.of("p", "c", "a".repeat(245) + "@example.com", "key"));
                 equal(requests.get(), 0);
             });
             run("binding reconciliation exposes structured details without retry", () -> {
                 overrideStatus = 503;
                 overrideBody = "{\"success\":false,\"error\":\"binding_reconciling\",\"message\":\"reconciling\",\"subscriptionId\":42}";
                 ServerException error = expect(ServerException.class, () -> client(origin).createSubscription(
-                        AnoreClient.CreateSubscriptionParams.of("p", "c", "e", "same-key")));
+                        AnoreClient.CreateSubscriptionParams.of("p", "c", "e@example.com", "same-key")));
                 equal(requests.get(), 1);
                 equal(error.getSubscriptionId(), 42L);
                 equal(error.getDetail("error"), "binding_reconciling");
                 equal(error.getData().get("subscriptionId"), 42L);
+                for (Object invalid : Arrays.asList(0L, -1L, new BigInteger("9223372036854775808"),
+                        new BigDecimal("42.5"), 42.0d, "0", "01", "9223372036854775808", "42.0")) {
+                    Map<String, Object> details = new java.util.LinkedHashMap<>();
+                    details.put("subscriptionId", invalid);
+                    equal(new ApiException("fixture", 503, null, details).getSubscriptionId(), null);
+                }
+                Map<String, Object> stringDetails = new java.util.LinkedHashMap<>();
+                stringDetails.put("subscriptionId", "42");
+                equal(new ApiException("fixture", 503, null, stringDetails).getSubscriptionId(), 42L);
+                Map<String, Object> absentDetails = Json.parseObject("{\"error\":\"binding_reconciling\",\"message\":\"still reconciling\"}");
+                ApiException absent = new ApiException("still reconciling", 503, null, absentDetails);
+                equal(absent.getSubscriptionId(), null);
+                equal(absent.getDetail("error"), "binding_reconciling");
+                equal(absent.getDetail("message"), "still reconciling");
             });
             run("subscription charge POST is never retried", () -> {
                 overrideStatus = 429;
