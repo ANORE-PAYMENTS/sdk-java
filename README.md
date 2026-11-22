@@ -32,7 +32,7 @@ java/
 <dependency>
   <groupId>com.github.ANORE-PAYMENTS</groupId>
   <artifactId>sdk-java</artifactId>
-  <version>d69cdfd67a0105b9d719624d845f0e6a778721f2</version>
+  <version>7da7ef6d8ea737babaae282415e44f87bc8ef5ac</version>
 </dependency>
 ```
 
